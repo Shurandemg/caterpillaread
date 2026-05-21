@@ -1,0 +1,37 @@
+# Окружение
+.env
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Загруженные файлы
+uploads/
+mobi_temp/
+
+# Логи
+logs/
+*.log
+
+# БД
+*.db
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
