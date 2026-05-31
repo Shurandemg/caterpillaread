@@ -364,6 +364,8 @@ class CaterpillarReadBot:
             if chunk:
                 book = db.get_book(book_id)
                 await self.send_chunk_to_user(update.effective_chat.id, chunk.text, book.title, chunk.chunk_number)
+                db.mark_chunk_sent(chunk.id)
+                db.update_book_progress(book_id, chunk.chunk_number)
     
     async def send_chunk_to_user(self, chat_id: int, chunk_text: str, book_title: str = None, chunk_num: int = 0):
         """Отправляет кусок текста пользователю"""

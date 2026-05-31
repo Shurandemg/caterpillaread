@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from sqlalchemy import create_engine, and_, or_
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 
 from models import Base, User, Book, Chunk, Schedule, LanguageEnum, ScheduleEnum
@@ -15,7 +15,7 @@ class Database:
     
     def __init__(self):
         self.engine = create_engine(DATABASE_URL, echo=False, pool_size=10, max_overflow=20)
-        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine, expire_on_commit=False)
         Base.metadata.create_all(self.engine)
         logger.info("Database initialized")
     
@@ -319,7 +319,7 @@ class Database:
         session = self.get_session()
         try:
             now = datetime.utcnow()
-            return session.query(Schedule).filter(
+            return session.query(Schedule).options(joinedload(Schedule.user)).filter(
                 and_(
                     Schedule.is_active == True,
                     Schedule.next_send_time <= now
