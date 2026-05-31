@@ -8,12 +8,14 @@ import PyPDF2
 import pdfplumber
 from docx import Document
 try:
-    import epub
-except:
+    import ebooklib
+    from ebooklib import epub
+except ImportError:
     epub = None
+    ebooklib = None
 try:
     from mobi import MobiBook
-except:
+except ImportError:
     MobiBook = None
 from langdetect import detect, LangDetectException
 
@@ -126,7 +128,7 @@ class FileParser:
             book = epub.read_epub(file_path)
             
             for item in book.get_items():
-                if item.get_type() == epub.ITEM_DOCUMENT:
+                if item.get_type() == ebooklib.ITEM_DOCUMENT:
                     content = item.get_content()
                     # Простое удаление HTML тегов
                     import re

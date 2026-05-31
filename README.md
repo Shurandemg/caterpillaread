@@ -1,488 +1,434 @@
-# CaterpillarRead (Caterpillar Read) 📚
+# CaterpillarRead 📚
 
-Telegram бот для чтения электронных книг маленькими порциями с заданной периодичностью.
+Telegram-бот для чтения электронных книг небольшими порциями с заданной периодичностью.
 
-## 📋 Оглавление
+---
 
-- [Требования](#требования)
-- [Установка](#установка)
-- [Конфигурация](#конфигурация)
-- [Запуск](#запуск)
+## Оглавление
+
+- [Как получить Telegram-токен](#как-получить-telegram-токен)
+- [Быстрый старт — Docker (рекомендуется)](#быстрый-старт--docker-рекомендуется)
+- [Развёртывание на VPS-сервере](#развёртывание-на-vps-сервере)
+- [Переменные окружения](#переменные-окружения)
+- [Команды бота](#команды-бота)
+- [Мониторинг и логи](#мониторинг-и-логи)
+- [Полезные команды](#полезные-команды)
+- [Решение проблем](#решение-проблем)
 - [Архитектура](#архитектура)
-- [API Документация](#api-документация)
+- [Известные ограничения](#известные-ограничения)
 
-## 🔧 Требования
+---
 
-- Python 3.9+
-- PostgreSQL 12+
-- Redis 6.0+
-- Telegram Bot Token
+## Как получить Telegram-токен
 
-## 📦 Установка
+1. Откройте [@BotFather](https://t.me/BotFather) в Telegram
+2. Отправьте `/newbot`
+3. Введите имя и username бота
+4. Скопируйте полученный токен вида `123456789:AAF...`
 
-### 1. Клонируем репозиторий
+---
+
+## Быстрый старт — Docker (рекомендуется)
+
+### Требования
+
+- Docker 20.10+
+- Docker Compose v2 (входит в Docker Desktop и современные версии Docker Engine)
+
+### Шаги
+
+**1. Клонируем репозиторий**
+
 ```bash
-git clone <repository_url>
-cd caterpillar_read
+git clone https://github.com/Shurandemg/caterpillaread.git
+cd caterpillaread/caterpillaread
+git checkout claude/keen-goodall-Ut2XM
 ```
 
-### 2. Создаем виртуальное окружение
+**2. Создаём файл `.env`**
+
 ```bash
-python -m venv venv
-
-# Linux/Mac
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
-```
-
-### 3. Устанавливаем зависимости
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Конфигурируем окружение
-```bash
-# Копируем пример конфигурации
 cp .env.example .env
-
-# Редактируем .env с вашими параметрами
-nano .env  # или используйте ваш редактор
+nano .env
 ```
 
-## ⚙️ Конфигурация
-
-### Переменные окружения (.env)
+Обязательно заполните:
 
 ```env
-# Telegram Bot
-TELEGRAM_TOKEN=your_telegram_bot_token_here
-
-# PostgreSQL Database
-DATABASE_URL=postgresql://username:password@localhost:5432/caterpillar_read
-
-# Redis (для Celery)
-REDIS_URL=redis://localhost:6379/0
-
-# Логирование
-LOG_LEVEL=INFO
-
-# Настройки разбиения текста
-CHUNK_SIZE_MIN=300          # Минимум символов в куске
-CHUNK_SIZE_MAX=2000         # Максимум символов в куске
-MAX_MESSAGES=2              # Максимум сообщений в рассылке
-
-# Языковые модели spaCy
-SPACY_MODEL_EN=en_core_web_sm
-SPACY_MODEL_RU=ru_core_news_sm
-
-# Загрузка файлов
-MAX_FILE_SIZE=50000000      # 50MB в байтах
-UPLOAD_DIR=./uploads
-TEMP_DIR=./temp
+TELEGRAM_TOKEN=токен_от_BotFather
+POSTGRES_PASSWORD=придумайте_надёжный_пароль
 ```
 
-### Создание базы данных PostgreSQL
+Остальные значения можно оставить по умолчанию.
+
+**3. Запускаем**
 
 ```bash
-# Подключитесь к PostgreSQL
-psql -U postgres
-
-# Создайте базу данных
-CREATE DATABASE caterpillar_read;
-CREATE USER caterpillar WITH PASSWORD 'your_password';
-ALTER ROLE caterpillar SET client_encoding TO 'utf8';
-ALTER ROLE caterpillar SET default_transaction_isolation TO 'read committed';
-ALTER ROLE caterpillar SET default_transaction_deferrable TO on;
-ALTER ROLE caterpillar SET default_transaction_read_only TO off;
-GRANT ALL PRIVILEGES ON DATABASE caterpillar_read TO caterpillar;
-\q
+docker compose up -d --build
 ```
 
-### Установка Redis
+**4. Проверяем статус**
 
 ```bash
-# Ubuntu/Debian
-sudo apt-get install redis-server
-sudo systemctl start redis-server
-
-# macOS
-brew install redis
-brew services start redis
-
-# Docker
-docker run -d -p 6379:6379 redis:7
+docker compose ps
 ```
 
-### Установка NLP моделей
+Все контейнеры должны быть в состоянии `running`:
+
+| Контейнер          | Роль                        |
+|--------------------|-----------------------------|
+| caterpillar_postgres | База данных PostgreSQL      |
+| caterpillar_redis    | Брокер задач Redis          |
+| caterpillar_bot      | Telegram-бот                |
+| caterpillar_worker   | Celery Worker (выполнение)  |
+| caterpillar_beat     | Celery Beat (расписание)    |
+| caterpillar_flower   | Веб-интерфейс мониторинга   |
+
+**5. Проверяем логи бота**
 
 ```bash
-# Английская модель
-python -m spacy download en_core_web_sm
-
-# Русская модель
-python -m spacy download ru_core_news_sm
+docker compose logs -f bot
 ```
 
-## 🚀 Запуск
+---
 
-### 1. Инициализация проекта
+## Развёртывание на VPS-сервере
+
+### 1. Установка Docker на чистый сервер (Ubuntu/Debian)
 
 ```bash
-python init_project.py
+curl -fsSL https://get.docker.com | sh
 ```
 
-Это выполнит:
-- Проверку конфигурации
-- Создание таблиц БД
-- Загрузку языковых моделей
-- Проверку подключений
-
-### 2. Запуск Telegram бота
+Проверяем:
 
 ```bash
-python bot.py
+docker --version
+docker compose version
 ```
 
-Вывод:
-```
-2024-01-15 10:30:45 - root - INFO - Starting bot...
-2024-01-15 10:30:45 - root - INFO - Bot handlers setup completed
-```
-
-### 3. Запуск Celery Worker (в отдельном терминале)
+### 2. Клонируем проект
 
 ```bash
-celery -A tasks worker --loglevel=info
+git clone https://github.com/Shurandemg/caterpillaread.git /opt/caterpillaread
+cd /opt/caterpillaread/caterpillaread
+git checkout claude/keen-goodall-Ut2XM
 ```
 
-### 4. Запуск Celery Beat (в отдельном терминале)
+### 3. Создаём `.env`
 
 ```bash
-celery -A tasks beat --loglevel=info
+cp .env.example .env
+nano .env
 ```
 
-Celery Beat проверяет расписания каждую минуту и отправляет готовые куски.
-
-### Полная инструкция для Linux
+### 4. Запускаем
 
 ```bash
-# Откройте 3 терминала
-
-# Терминал 1: Telegram бот
-source venv/bin/activate
-python bot.py
-
-# Терминал 2: Celery Worker
-source venv/bin/activate
-celery -A tasks worker --loglevel=info
-
-# Терминал 3: Celery Beat Scheduler
-source venv/bin/activate
-celery -A tasks beat --loglevel=info
+docker compose up -d --build
 ```
 
-## 🏗️ Архитектура
+### 5. Настройка автозапуска после перезагрузки
 
-### Компоненты
-
-```
-CaterpillarRead/
-├── bot.py                 # Главный Telegram бот
-├── database.py           # Слой работы с БД
-├── models.py             # SQLAlchemy модели
-├── file_parser.py        # Парсинг файлов (TXT, PDF, EPUB, MOBI, DOCX)
-├── chunk_generator.py    # Умное разбиение текста
-├── tasks.py              # Celery задачи для планирования
-├── config.py             # Конфигурация приложения
-├── init_project.py       # Скрипт инициализации
-├── requirements.txt      # Зависимости Python
-└── .env.example          # Пример конфигурации
-```
-
-### Поток данных
-
-```
-┌─────────────────────┐
-│   Telegram User     │
-│   (отправляет файл) │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   bot.py            │
-│  handle_file_upload │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  file_parser.py     │
-│  (парсит файл)      │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ chunk_generator.py  │
-│ (разбивает текст)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  database.py        │
-│  (сохраняет куски)  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Celery Beat         │
-│ (проверка каждую    │
-│  минуту)            │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Celery Worker       │
-│ (отправляет куски)  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Telegram User      │
-│  (получает куски)   │
-└─────────────────────┘
-```
-
-### Модели БД
-
-#### User
-- `id` - Уникальный ID
-- `telegram_id` - ID в Telegram
-- `chat_id` - ID чата
-- `username` - Имя пользователя
-- `language` - Язык для обработки (ru/en/auto)
-- `timezone` - Часовой пояс
-- `is_active` - Активен ли пользователь
-
-#### Book
-- `id` - Уникальный ID
-- `user_id` - ID пользователя
-- `filename` - Имя файла на диске
-- `original_filename` - Оригинальное имя
-- `file_format` - Формат файла (txt, pdf, epub, mobi, docx)
-- `title` - Название книги
-- `author` - Автор
-- `total_chunks` - Всего кусков
-- `current_chunk` - Текущий куск
-- `detected_language` - Обнаруженный язык
-- `is_completed` - Завершена ли книга
-
-#### Chunk
-- `id` - Уникальный ID
-- `book_id` - ID книги
-- `chunk_number` - Номер куска
-- `text` - Текст куска
-- `character_count` - Количество символов
-- `word_count` - Количество слов
-- `sent_at` - Когда был отправлен
-
-#### Schedule
-- `id` - Уникальный ID
-- `user_id` - ID пользователя
-- `book_id` - ID книги
-- `interval` - Интервал отправки
-- `interval_minutes` - Интервал в минутах
-- `next_send_time` - Время следующей отправки
-- `is_active` - Активно ли расписание
-
-## 📱 Команды бота
-
-| Команда | Описание |
-|---------|---------|
-| `/start` | Приветствие и инструкции |
-| `/help` | Справка по командам |
-| `/books` | Список загруженных книг |
-| `/progress` | Прогресс чтения |
-| `/settings` | Настройки (выбор языка) |
-| `/cancel` | Отмена операции |
-
-## 📤 Поддерживаемые форматы
-
-- ✅ TXT (текстовые файлы)
-- ✅ PDF (с использованием PyPDF2 и pdfplumber)
-- ✅ EPUB (электронные книги)
-- ✅ MOBI (Amazon Kindle)
-- ✅ DOCX (Microsoft Word)
-- ✅ DOC (старые Word документы)
-
-## ⏱️ Интервалы рассылки
-
-- ⏱️ 15 минут
-- ⏱️ 30 минут
-- ⏰ 1 час
-- ⏰ 3 часа
-- ⏰ 6 часов
-- 📅 1 день
-- 📅 2 дня
-- 📅 1 неделя
-
-## 🔧 Настройка разбиения текста
-
-Параметры в `.env`:
-
-```env
-# Минимальный размер куска (если меньше, объединяется с соседним)
-CHUNK_SIZE_MIN=300
-
-# Максимальный размер куска (если больше, разбивается по предложениям)
-CHUNK_SIZE_MAX=2000
-```
-
-### Алгоритм разбиения
-
-1. Текст разбивается по параграфам (`\n\n`)
-2. Каждый параграф разбивается на предложения (используется spaCy для русского/английского)
-3. Куски собираются таким образом, чтобы:
-   - Не рвались слова
-   - Не рвались предложения
-   - Не разрывались по смыслу
-   - Размер был между MIN и MAX
-4. Маленькие куски объединяются с соседними
-
-## 🐛 Отладка
-
-### Проверка логов
+Контейнеры уже настроены на `restart: unless-stopped`, то есть поднимутся сами после перезагрузки сервера при условии, что Docker-демон запускается автоматически:
 
 ```bash
-# Телеграм бот
-tail -f logs/bot.log
-
-# Celery worker
-tail -f logs/worker.log
-
-# Celery beat
-tail -f logs/beat.log
+systemctl enable docker
 ```
 
-### Проверка БД
+### Обновление до новой версии
 
 ```bash
-psql -U caterpillar -d caterpillar_read
+cd /opt/caterpillaread/caterpillaread
+git pull origin claude/keen-goodall-Ut2XM
+docker compose build bot celery_worker celery_beat
+docker compose up -d bot celery_worker celery_beat
+```
+
+Базу данных и Redis пересобирать не нужно — данные сохраняются в Docker volumes.
+
+---
+
+## Переменные окружения
+
+Все переменные задаются в файле `.env` в папке `caterpillaread/`.
+
+| Переменная         | Обязательно | Значение по умолчанию                  | Описание                                 |
+|--------------------|-------------|----------------------------------------|------------------------------------------|
+| `TELEGRAM_TOKEN`   | ✅           | —                                      | Токен бота от @BotFather                 |
+| `POSTGRES_PASSWORD`| ✅           | `caterpillar_pass`                     | Пароль PostgreSQL (смените!)             |
+| `POSTGRES_USER`    |             | `caterpillar`                          | Пользователь PostgreSQL                  |
+| `POSTGRES_DB`      |             | `caterpillaread`                       | Имя базы данных                          |
+| `POSTGRES_HOST`    |             | `postgres`                             | Хост PostgreSQL (внутри Docker — `postgres`) |
+| `POSTGRES_PORT`    |             | `5432`                                 | Порт PostgreSQL                          |
+| `REDIS_URL`        |             | `redis://redis:6379/0`                 | URL Redis                                |
+| `CHUNK_SIZE_MIN`   |             | `500`                                  | Минимальный размер куска (символов)      |
+| `CHUNK_SIZE_MAX`   |             | `3000`                                 | Максимальный размер куска (символов)     |
+| `MAX_FILE_SIZE`    |             | `52428800` (50 MB)                     | Максимальный размер загружаемого файла   |
+| `UPLOAD_DIR`       |             | `uploads`                              | Папка для загруженных файлов             |
+| `LOG_LEVEL`        |             | `INFO`                                 | Уровень логирования (`DEBUG`/`INFO`/`WARNING`) |
+
+> **Важно:** переменные `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_HOST`, `POSTGRES_PORT` используются только при запуске **без Docker** (локально). В Docker-режиме соединение задаётся через `DATABASE_URL`, который docker-compose формирует автоматически.
+
+---
+
+## Команды бота
+
+| Команда      | Описание                            |
+|--------------|-------------------------------------|
+| `/start`     | Приветствие и краткая инструкция    |
+| `/help`      | Справка по командам и форматам      |
+| `/books`     | Список загруженных книг с прогрессом|
+| `/progress`  | Прогресс чтения и расписание        |
+| `/settings`  | Смена языка обработки текста        |
+| `/cancel`    | Отмена текущей операции             |
+
+### Поддерживаемые форматы файлов
+
+| Формат | Поддержка    |
+|--------|--------------|
+| TXT    | ✅ Полная     |
+| PDF    | ✅ Полная     |
+| DOCX   | ✅ Полная     |
+| EPUB   | ✅ Полная     |
+| DOC    | ⚠️ Только если файл совместим с DOCX |
+| MOBI   | ❌ Не поддерживается (библиотека не установлена) |
+
+### Интервалы рассылки
+
+15 мин · 30 мин · 1 час · 3 часа · 6 часов · 1 день · 2 дня · 1 неделя
+
+---
+
+## Мониторинг и логи
+
+### Логи контейнеров
+
+```bash
+# Логи бота (в реальном времени)
+docker compose logs -f bot
+
+# Логи Celery Worker
+docker compose logs -f celery_worker
+
+# Логи Celery Beat (расписание)
+docker compose logs -f celery_beat
+
+# Логи всех сервисов сразу
+docker compose logs -f
+
+# Последние 100 строк бота
+docker compose logs --tail=100 bot
+```
+
+### Веб-интерфейс Flower (Celery)
+
+После запуска откройте в браузере: **http://ваш_ip:5555**
+
+Там видны все задачи, воркеры и очереди.
+
+### Статус контейнеров
+
+```bash
+docker compose ps
+```
+
+### Использование ресурсов
+
+```bash
+docker stats
+```
+
+---
+
+## Полезные команды
+
+### Управление контейнерами
+
+```bash
+# Запустить всё
+docker compose up -d
+
+# Остановить всё (данные сохраняются)
+docker compose down
+
+# Остановить и удалить данные (БД, Redis)
+docker compose down -v
+
+# Перезапустить один сервис
+docker compose restart bot
+
+# Пересобрать образы и перезапустить
+docker compose up -d --build
+```
+
+### Работа с базой данных
+
+```bash
+# Подключиться к PostgreSQL внутри контейнера
+docker compose exec postgres psql -U caterpillar -d caterpillar_read
 
 # Список таблиц
 \dt
 
-# Просмотр пользователей
+# Посмотреть пользователей
 SELECT * FROM users;
 
-# Просмотр книг
-SELECT * FROM books;
+# Посмотреть книги
+SELECT id, title, total_chunks, current_chunk, is_completed FROM books;
 
-# Просмотр расписаний
+# Посмотреть расписания
 SELECT * FROM schedules;
+
+# Выйти из psql
+\q
 ```
 
-### Проверка Redis
+### Работа с Redis
 
 ```bash
-redis-cli
+# Подключиться к Redis внутри контейнера
+docker compose exec redis redis-cli
 
-# Проверка статуса
-PING  # Should return PONG
+# Проверить соединение
+PING   # должен ответить PONG
 
-# Просмотр ключей
+# Посмотреть все ключи
 KEYS *
+
+# Выйти
+exit
 ```
 
-## 🚨 Решение проблем
-
-### PostgreSQL не подключается
-```bash
-# Проверьте DATABASE_URL в .env
-# Убедитесь, что PostgreSQL запущен
-sudo systemctl status postgresql
-
-# Проверьте пароль и доступ
-psql -U caterpillar -d caterpillar_read
-```
-
-### Redis не подключается
-```bash
-# Проверьте, что Redis запущен
-redis-cli ping
-
-# Если выключен, запустите
-redis-server
-```
-
-### spaCy модель не скачалась
-```bash
-# Скачайте вручную
-python -m spacy download en_core_web_sm
-python -m spacy download ru_core_news_sm
-```
-
-### Бот не отвечает
-```bash
-# Проверьте TELEGRAM_TOKEN в .env
-# Убедитесь, что токен корректный
-# Перезагрузите бота
-
-# Проверьте логи
-tail -100 logs/*.log
-```
-
-## 📊 Мониторинг
-
-### Celery Flower (веб-интерфейс)
+### Отладка внутри контейнера
 
 ```bash
-# Установка
-pip install flower
+# Открыть shell в контейнере бота
+docker compose exec bot bash
 
-# Запуск (порт 5555)
-celery -A tasks flower
+# Проверить переменные окружения
+docker compose exec bot env | grep TELEGRAM
+docker compose exec bot env | grep DATABASE
 ```
 
-Откройте http://localhost:5555 для просмотра статуса задач.
+### Принудительный перезапуск после сбоя
 
-## 🔐 Безопасность
-
-- Не коммитьте `.env` файл в git
-- Используйте сильные пароли для PostgreSQL
-- Ограничивайте доступ к серверу
-- Регулярно обновляйте зависимости
-
-## 📝 Логирование
-
-Логирование настроено на уровне INFO. Для изменения:
-
-```env
-LOG_LEVEL=DEBUG    # Более подробные логи
-LOG_LEVEL=WARNING  # Только важные события
+```bash
+docker compose down
+docker compose up -d
 ```
-
-## 🤝 Развитие проекта
-
-Возможные улучшения:
-
-- [ ] Web админка для управления расписаниями
-- [ ] Поддержка аудиокниг (TTS)
-- [ ] Синхронизация между устройствами
-- [ ] Статистика по чтению
-- [ ] Группы и списки чтения
-- [ ] Интеграция с GoodReads
-
-## 📄 Лицензия
-
-MIT License - смотрите LICENSE файл
-
-## 💬 Поддержка
-
-Для вопросов и предложений создавайте Issues в репозитории.
 
 ---
 
-**Автор:** CaterpillarRead Bot Project  
-**Версия:** 1.0.0  
-**Последнее обновление:** 2024
+## Решение проблем
+
+### Бот не отвечает
+
+```bash
+# Смотрим логи
+docker compose logs --tail=50 bot
+
+# Проверяем, что токен задан
+docker compose exec bot env | grep TELEGRAM_TOKEN
+```
+
+Частые причины:
+- Неверный или пустой `TELEGRAM_TOKEN` в `.env`
+- Контейнер упал — проверьте `docker compose ps`
+
+### Куски не отправляются по расписанию
+
+```bash
+# Проверяем, что Beat и Worker запущены
+docker compose ps
+
+# Смотрим логи Beat
+docker compose logs --tail=50 celery_beat
+
+# Смотрим логи Worker
+docker compose logs --tail=50 celery_worker
+```
+
+### PostgreSQL не запускается
+
+```bash
+docker compose logs postgres
+```
+
+Частая причина — уже занят порт 5432. Проверьте:
+```bash
+# Linux
+ss -tlnp | grep 5432
+
+# macOS
+lsof -i :5432
+```
+
+### Ошибка при загрузке файла
+
+```bash
+docker compose logs --tail=100 bot | grep ERROR
+```
+
+### Пересборка с нуля (если что-то пошло совсем не так)
+
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+```
+
+> ⚠️ `down -v` удалит все данные базы данных.
+
+---
+
+## Архитектура
+
+```
+Пользователь
+    │
+    │ отправляет файл
+    ▼
+bot.py  ──── скачивает ────► file_parser.py  (TXT / PDF / EPUB / DOCX)
+    │                              │
+    │                              ▼
+    │                        chunk_generator.py  (разбивка на куски)
+    │                              │
+    │                              ▼
+    │                         database.py  (сохранение в PostgreSQL)
+    │
+    │ пользователь выбирает интервал
+    ▼
+database.py  (создаёт расписание Schedule)
+    │
+    │ каждую минуту
+    ▼
+Celery Beat  ──► tasks.send_scheduled_chunks  ──► Celery Worker
+                                                        │
+                                                        ▼
+                                                 bot.send_message
+                                                        │
+                                                        ▼
+                                                 Пользователь получает кусок
+```
+
+### Файлы проекта
+
+| Файл                 | Назначение                                      |
+|----------------------|-------------------------------------------------|
+| `bot.py`             | Telegram-бот, обработчики команд и файлов       |
+| `tasks.py`           | Celery-задачи: обработка и рассылка по расписанию |
+| `database.py`        | Все операции с PostgreSQL через SQLAlchemy      |
+| `models.py`          | Модели данных: User, Book, Chunk, Schedule      |
+| `file_parser.py`     | Парсинг форматов TXT, PDF, EPUB, DOCX           |
+| `chunk_generator.py` | Умная разбивка текста на смысловые куски        |
+| `config.py`          | Конфигурация из переменных окружения            |
+| `init_project.py`    | Скрипт проверки окружения (для локального запуска) |
+
+---
+
+## Известные ограничения
+
+- **MOBI** — формат не поддерживается: библиотека `mobi` отсутствует в `requirements.txt`. Для добавления поддержки установите `pip install mobi` и добавьте её в `requirements.txt`.
+- **DOC (старый формат Word)** — поддерживается только если файл совместим с DOCX. Настоящие `.doc` файлы (до Office 2007) не обрабатываются.
+- **Большие файлы** — парсинг происходит синхронно в обработчике бота. Очень большие книги (>10 MB текста) могут обрабатываться несколько секунд.
