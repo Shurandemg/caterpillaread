@@ -1,4 +1,5 @@
 import os
+import html
 import logging
 from datetime import datetime
 import uuid
@@ -141,19 +142,19 @@ class CaterpillarReadBot:
             await update.message.reply_text("📚 У вас пока нет загруженных книг.")
             return
         
-        books_text = "📚 **Ваши книги:**\n\n"
-        
+        books_text = "📚 <b>Ваши книги:</b>\n\n"
+
         for i, book in enumerate(books, 1):
             progress = (book.current_chunk / book.total_chunks * 100) if book.total_chunks > 0 else 0
             status = "✅ Прочитана" if book.is_completed else "📖 Читается"
-            
-            books_text += f"{i}. **{book.title}**\n"
-            books_text += f"   Автор: {book.author or 'Неизвестен'}\n"
+
+            books_text += f"{i}. <b>{html.escape(book.title)}</b>\n"
+            books_text += f"   Автор: {html.escape(book.author or 'Неизвестен')}\n"
             books_text += f"   Статус: {status}\n"
             books_text += f"   Прогресс: {book.current_chunk}/{book.total_chunks} кусков ({progress:.1f}%)\n"
             books_text += f"   Формат: {book.file_format.upper()}\n\n"
-        
-        await update.message.reply_text(books_text, parse_mode='Markdown')
+
+        await update.message.reply_text(books_text, parse_mode='HTML')
     
     async def progress(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /progress"""
@@ -165,13 +166,13 @@ class CaterpillarReadBot:
             await update.message.reply_text("📊 Нет активных книг для чтения.")
             return
         
-        progress_text = "📊 **Ваш прогресс:**\n\n"
-        
+        progress_text = "📊 <b>Ваш прогресс:</b>\n\n"
+
         for book in books:
             schedule = db.get_schedule(book.id)
             progress = (book.current_chunk / book.total_chunks * 100) if book.total_chunks > 0 else 0
-            
-            progress_text += f"📖 **{book.title}**\n"
+
+            progress_text += f"📖 <b>{html.escape(book.title)}</b>\n"
             progress_text += f"Прочитано: {book.current_chunk}/{book.total_chunks} ({progress:.1f}%)\n"
             
             if schedule:
@@ -192,7 +193,7 @@ class CaterpillarReadBot:
             
             progress_text += "\n"
         
-        await update.message.reply_text(progress_text, parse_mode='Markdown')
+        await update.message.reply_text(progress_text, parse_mode='HTML')
     
     async def settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /settings"""
@@ -297,18 +298,16 @@ class CaterpillarReadBot:
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            summary_text = f"""
-✅ **Файл успешно загружен!**
+            summary_text = (
+                "✅ <b>Файл успешно загружен!</b>\n\n"
+                f"📚 <b>{html.escape(filename)}</b>\n"
+                f"📄 Язык: {detected_language.upper()}\n"
+                f"📖 Кусков текста: {len(chunks)}\n"
+                f"📏 Объем: ~{sum(len(c) for c in chunks) // 1000}KB\n\n"
+                "Выберите, как часто отправлять куски:"
+            )
 
-📚 **{filename}**
-📄 Язык: {detected_language.upper()}
-📖 Кусков текста: {len(chunks)}
-📏 Объем: ~{sum(len(c) for c in chunks) // 1000}KB
-
-Выберите, как часто отправлять куски:
-            """
-            
-            await processing_msg.edit_text(summary_text, reply_markup=reply_markup, parse_mode='Markdown')
+            await processing_msg.edit_text(summary_text, reply_markup=reply_markup, parse_mode='HTML')
             
         except Exception as e:
             logger.error(f"Error processing file: {e}")
@@ -370,18 +369,19 @@ class CaterpillarReadBot:
     async def send_chunk_to_user(self, chat_id: int, chunk_text: str, book_title: str = None, chunk_num: int = 0):
         """Отправляет кусок текста пользователю"""
         try:
-            message = ""
+            header = ""
             if book_title:
-                message += f"📚 **{book_title}** (кусок {chunk_num})\n\n"
-            message += chunk_text
-            
+                header = f"📚 <b>{html.escape(book_title)}</b> (кусок {chunk_num})\n\n"
+            body = html.escape(chunk_text)
+            message = header + body
+
             # Разбиваем на части если очень длинный
-            if len(message) > 4096:  # Лимит Telegram
+            if len(message) > 4096:
                 parts = [message[i:i+4096] for i in range(0, len(message), 4096)]
                 for part in parts:
-                    await self.application.bot.send_message(chat_id, part, parse_mode='Markdown')
+                    await self.application.bot.send_message(chat_id, part, parse_mode='HTML')
             else:
-                await self.application.bot.send_message(chat_id, message, parse_mode='Markdown')
+                await self.application.bot.send_message(chat_id, message, parse_mode='HTML')
             
             logger.info(f"Sent chunk {chunk_num} to chat {chat_id}")
         except Exception as e:

@@ -1,3 +1,4 @@
+import html
 import logging
 from datetime import datetime, timedelta
 from celery import Celery
@@ -85,12 +86,15 @@ def send_scheduled_chunks():
                 db.deactivate_schedule(schedule.id)
                 continue
 
-            message = f"📚 *{book.title}* (кусок {chunk.chunk_number}/{book.total_chunks})\n\n{chunk.text}"
+            message = (
+                f"📚 <b>{html.escape(book.title)}</b> (кусок {chunk.chunk_number}/{book.total_chunks})\n\n"
+                f"{html.escape(chunk.text)}"
+            )
 
             asyncio.run(bot.send_message(
                 chat_id=schedule.user.chat_id,
                 text=message[:4096],
-                parse_mode="Markdown",
+                parse_mode="HTML",
             ))
 
             db.mark_chunk_sent(chunk.id)
