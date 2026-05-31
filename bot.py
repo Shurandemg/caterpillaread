@@ -81,26 +81,22 @@ class CaterpillarReadBot:
             username=user.username
         )
         
-        welcome_text = f"""
-👋 Добро пожаловать в **Caterpillar Read** ({user.first_name})!
+        welcome_text = (
+            f"👋 Добро пожаловать в <b>Caterpillar Read</b> ({html.escape(user.first_name)})!\n\n"
+            "Я помогу вам читать книги небольшими порциями. Вот что я умею:\n\n"
+            "📚 /books - Посмотреть список загруженных книг\n"
+            "⚙️ /settings - Изменить язык и другие настройки\n"
+            "📊 /progress - Посмотреть прогресс чтения\n"
+            "❓ /help - Справка по командам\n\n"
+            "<b>Как начать:</b>\n"
+            "1. Отправьте мне файл книги (TXT, PDF, EPUB, MOBI, DOCX)\n"
+            "2. Выберите периодичность отправки (раз в час, раз в день и т.д.)\n"
+            "3. Я буду отправлять вам куски текста по расписанию 📖\n\n"
+            "<b>Форматы:</b> TXT, PDF, EPUB, MOBI, DOC, DOCX\n"
+            "<b>Максимальный размер:</b> 50MB"
+        )
 
-Я помогу вам читать книги небольшими порциями. Вот что я умею:
-
-📚 **/books** - Посмотреть список загруженных книг
-⚙️ **/settings** - Изменить язык и другие настройки
-📊 **/progress** - Посмотреть прогресс чтения
-❓ **/help** - Справка по командам
-
-**Как начать:**
-1. Отправьте мне файл книги (TXT, PDF, EPUB, MOBI, DOCX)
-2. Выберите периодичность отправки (раз в час, раз в день и т.д.)
-3. Я буду отправлять вам куски текста по расписанию 📖
-
-**Форматы:** TXT, PDF, EPUB, MOBI, DOC, DOCX
-**Максимальный размер:** 50MB
-        """
-        
-        await update.message.reply_text(welcome_text, parse_mode='Markdown')
+        await update.message.reply_text(welcome_text, parse_mode='HTML')
         logger.info(f"User {user.id} started the bot")
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -347,16 +343,14 @@ class CaterpillarReadBot:
                 'weekly': '1 неделю',
             }
             
-            success_text = f"""
-✅ **Расписание создано!**
+            success_text = (
+                "✅ <b>Расписание создано!</b>\n\n"
+                f"Куски будут отправляться каждый(е) <b>{interval_names.get(interval, interval)}</b>\n"
+                f"Первый кусок отправится в: {schedule.next_send_time.strftime('%d.%m.%Y %H:%M UTC')}\n\n"
+                "Используйте /progress для отслеживания прогресса чтения."
+            )
 
-Куски будут отправляться каждый(е) **{interval_names.get(interval, interval)}**
-Первый кусок отправится в: {schedule.next_send_time.strftime('%d.%m.%Y %H:%M UTC')}
-
-Используйте /progress для отслеживания прогресса чтения.
-            """
-            
-            await query.edit_message_text(success_text, parse_mode='Markdown')
+            await query.edit_message_text(success_text, parse_mode='HTML')
             
             # Отправляем первый кусок сразу
             chunk = db.get_next_chunk(book_id)
