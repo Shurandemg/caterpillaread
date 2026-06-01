@@ -56,6 +56,7 @@ class CaterpillarReadBot:
         self.application.add_handler(CommandHandler("books", self.list_books))
         self.application.add_handler(CommandHandler("settings", self.settings))
         self.application.add_handler(CommandHandler("progress", self.progress))
+        self.application.add_handler(CommandHandler("next", self.next_chunk))
         self.application.add_handler(CommandHandler("cancel", self.cancel))
         
         # Обработчики файлов
@@ -106,6 +107,7 @@ class CaterpillarReadBot:
 
 /start - Перезагрузить приветствие
 /books - Список ваших книг
+/next - Получить следующий кусок прямо сейчас
 /settings - Настройки (язык и т.д.)
 /progress - Прогресс чтения каждой книги
 /help - Эта справка
@@ -316,6 +318,13 @@ class CaterpillarReadBot:
         
         await query.answer()
         
+        # Обработка выбора книги для /next
+        if query.data.startswith('next_'):
+            book_id = int(query.data.split('_')[1])
+            await query.edit_message_text("⏳ Отправляю следующий кусок...")
+            await self._send_next_chunk_for_book(update.effective_chat.id, book_id)
+            return
+
         # Обработка выбора языка
         if query.data.startswith('lang_'):
             language = query.data.split('_')[1]
@@ -381,6 +390,49 @@ class CaterpillarReadBot:
         except Exception as e:
             logger.error(f"Error sending chunk: {e}")
     
+    async def next_chunk(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /next — отправляет следующий кусок немедленно"""
+        user = update.effective_user
+
+        books = db.get_user_books(user.id, active_only=True)
+        if not books:
+            await update.message.reply_text("📚 Нет активных книг.")
+            return
+
+        # Если несколько книг — показываем кнопки выбора
+        if len(books) > 1:
+            keyboard = [
+                [InlineKeyboardButton(
+                    f"📖 {book.title[:40]}",
+                    callback_data=f"next_{book.id}"
+                )]
+                for book in books
+            ]
+            await update.message.reply_text(
+                "Выберите книгу:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        await self._send_next_chunk_for_book(update.effective_chat.id, books[0].id)
+
+    async def _send_next_chunk_for_book(self, chat_id: int, book_id: int):
+        """Отправляет следующий кусок для указанной книги"""
+        book = db.get_book(book_id)
+        if not book or book.is_completed:
+            await self.application.bot.send_message(chat_id, "✅ Книга уже дочитана!")
+            return
+
+        chunk = db.get_next_chunk(book_id)
+        if not chunk:
+            await self.application.bot.send_message(chat_id, "✅ Больше кусков нет — книга дочитана!")
+            db.update_book_progress(book_id, book.total_chunks)
+            return
+
+        await self.send_chunk_to_user(chat_id, chunk.text, book.title, chunk.chunk_number)
+        db.mark_chunk_sent(chunk.id)
+        db.update_book_progress(book_id, chunk.chunk_number)
+
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Обработчик команды /cancel"""
         await update.message.reply_text("❌ Операция отменена.")
