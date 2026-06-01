@@ -30,15 +30,13 @@ SPACY_MODEL_EN = os.environ.get("SPACY_MODEL_EN", "en_core_web_sm")
 
 LANGUAGE_CODES = ["ru", "en", "auto"]
 
+# Values are in SECONDS
 SCHEDULE_OPTIONS = {
-    "15_min": 15,
-    "30_min": 30,
-    "1_hour": 60,
-    "3_hours": 180,
-    "6_hours": 360,
-    "daily": 1440,
-    "2_days": 2880,
-    "weekly": 10080,
+    "10_sec": 10,
+    "30_sec": 30,
+    "1_min": 60,
+    "3_min": 180,
+    "15_min": 900,
 }
 
 LOG_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)

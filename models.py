@@ -16,14 +16,11 @@ class LanguageEnum(str, enum.Enum):
 
 
 class ScheduleEnum(str, enum.Enum):
+    SEC_10 = "10_sec"
+    SEC_30 = "30_sec"
+    MIN_1 = "1_min"
+    MIN_3 = "3_min"
     MIN_15 = "15_min"
-    MIN_30 = "30_min"
-    HOUR_1 = "1_hour"
-    HOURS_3 = "3_hours"
-    HOURS_6 = "6_hours"
-    DAILY = "daily"
-    DAYS_2 = "2_days"
-    WEEKLY = "weekly"
 
 
 class User(Base):

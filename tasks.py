@@ -28,7 +28,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "send-scheduled-chunks": {
         "task": "tasks.send_scheduled_chunks",
-        "schedule": 60.0,  # каждую минуту
+        "schedule": 10.0,  # каждые 10 секунд
     },
 }
 
@@ -134,7 +134,7 @@ def send_scheduled_chunks():
         try:
             db.mark_chunk_sent(item["chunk_id"])
             db.update_book_progress(item["book_id"], item["chunk_number"])
-            next_send = datetime.utcnow() + timedelta(minutes=item["interval_minutes"])
+            next_send = datetime.utcnow() + timedelta(seconds=item["interval_minutes"])
             db.update_schedule(item["schedule_id"], next_send)
         except Exception as e:
             logger.error(f"Error updating DB after send for schedule {item['schedule_id']}: {e}")

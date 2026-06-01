@@ -269,8 +269,8 @@ class Database:
             if not user:
                 raise ValueError(f"User {telegram_id} not found")
             
-            interval_minutes = SCHEDULE_OPTIONS.get(interval, 1440)
-            next_send_time = datetime.utcnow() + timedelta(minutes=interval_minutes)
+            interval_minutes = SCHEDULE_OPTIONS.get(interval, 900)
+            next_send_time = datetime.utcnow() + timedelta(seconds=interval_minutes)
             
             schedule = Schedule(
                 user_id=user.id,

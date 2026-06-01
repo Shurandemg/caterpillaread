@@ -118,14 +118,11 @@ class CaterpillarReadBot:
 3. Готово! Начнется отправка кусочков текста
 
 **Доступные интервалы:**
-⏱️ 15 минут
-⏱️ 30 минут
-⏰ 1 час
-⏰ 3 часа
-⏰ 6 часов
-📅 1 день
-📅 2 дня
-📅 1 неделя
+⏱️ 10 секунд
+⏱️ 30 секунд
+⏰ 1 минута
+⏰ 3 минуты
+📅 15 минут
         """
         
         await update.message.reply_text(help_text, parse_mode='Markdown')
@@ -176,14 +173,11 @@ class CaterpillarReadBot:
             if schedule:
                 next_send = schedule.next_send_time
                 interval_text = {
+                    '10_sec': 'каждые 10 секунд',
+                    '30_sec': 'каждые 30 секунд',
+                    '1_min': 'каждую минуту',
+                    '3_min': 'каждые 3 минуты',
                     '15_min': 'каждые 15 минут',
-                    '30_min': 'каждые 30 минут',
-                    '1_hour': 'каждый час',
-                    '3_hours': 'каждые 3 часа',
-                    '6_hours': 'каждые 6 часов',
-                    'daily': 'каждый день',
-                    '2_days': 'каждые 2 дня',
-                    'weekly': 'каждую неделю',
                 }.get(schedule.interval, 'неизвестный')
                 
                 progress_text += f"Отправка: {interval_text}\n"
@@ -277,20 +271,15 @@ class CaterpillarReadBot:
             # Показываем варианты интервалов
             keyboard = [
                 [
-                    InlineKeyboardButton("⏱️ 15 мин", callback_data=f"interval_15_min_{book.id}"),
-                    InlineKeyboardButton("⏱️ 30 мин", callback_data=f"interval_30_min_{book.id}")
+                    InlineKeyboardButton("⏱️ 10 сек", callback_data=f"interval_10_sec_{book.id}"),
+                    InlineKeyboardButton("⏱️ 30 сек", callback_data=f"interval_30_sec_{book.id}")
                 ],
                 [
-                    InlineKeyboardButton("⏰ 1 час", callback_data=f"interval_1_hour_{book.id}"),
-                    InlineKeyboardButton("⏰ 3 часа", callback_data=f"interval_3_hours_{book.id}")
+                    InlineKeyboardButton("⏰ 1 мин", callback_data=f"interval_1_min_{book.id}"),
+                    InlineKeyboardButton("⏰ 3 мин", callback_data=f"interval_3_min_{book.id}")
                 ],
                 [
-                    InlineKeyboardButton("⏰ 6 часов", callback_data=f"interval_6_hours_{book.id}"),
-                    InlineKeyboardButton("📅 1 день", callback_data=f"interval_daily_{book.id}")
-                ],
-                [
-                    InlineKeyboardButton("📅 2 дня", callback_data=f"interval_2_days_{book.id}"),
-                    InlineKeyboardButton("📅 1 неделя", callback_data=f"interval_weekly_{book.id}")
+                    InlineKeyboardButton("📅 15 мин", callback_data=f"interval_15_min_{book.id}")
                 ]
             ]
             
@@ -342,14 +331,11 @@ class CaterpillarReadBot:
             schedule = db.create_schedule(user.id, book_id, interval)
             
             interval_names = {
+                '10_sec': '10 секунд',
+                '30_sec': '30 секунд',
+                '1_min': '1 минуту',
+                '3_min': '3 минуты',
                 '15_min': '15 минут',
-                '30_min': '30 минут',
-                '1_hour': '1 час',
-                '3_hours': '3 часа',
-                '6_hours': '6 часов',
-                'daily': '1 день',
-                '2_days': '2 дня',
-                'weekly': '1 неделю',
             }
             
             success_text = (
