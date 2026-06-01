@@ -1,7 +1,8 @@
 import os
 import html
+import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -48,7 +49,12 @@ class CaterpillarReadBot:
     
     def setup_handlers(self):
         """Настраивает обработчики команд"""
-        self.application = Application.builder().token(TELEGRAM_TOKEN).build()
+        self.application = (
+            Application.builder()
+            .token(TELEGRAM_TOKEN)
+            .post_init(self._start_scheduler)
+            .build()
+        )
         
         # Команды
         self.application.add_handler(CommandHandler("start", self.start))
@@ -418,6 +424,54 @@ class CaterpillarReadBot:
         await self.send_chunk_to_user(chat_id, chunk.text, book.title, chunk.chunk_number)
         db.mark_chunk_sent(chunk.id)
         db.update_book_progress(book_id, chunk.chunk_number)
+
+    async def _start_scheduler(self, application):
+        """Запускает фоновый цикл рассылки при старте бота"""
+        asyncio.create_task(self._scheduler_loop())
+        logger.info("Scheduler started")
+
+    async def _scheduler_loop(self):
+        """Фоновый цикл: каждые 10 секунд проверяет и отправляет куски по расписанию"""
+        while True:
+            await asyncio.sleep(10)
+            try:
+                await self._process_pending_schedules()
+            except Exception as e:
+                logger.error(f"Scheduler loop error: {e}")
+
+    async def _process_pending_schedules(self):
+        """Проверяет расписания и отправляет готовые куски"""
+        schedules = db.get_pending_schedules()
+        for schedule in schedules:
+            try:
+                book = db.get_book(schedule.book_id)
+                if not book or book.is_completed or not book.is_active:
+                    db.deactivate_schedule(schedule.id)
+                    continue
+
+                chunk = db.get_next_chunk(book.id)
+                if not chunk:
+                    db.deactivate_schedule(schedule.id)
+                    continue
+
+                await self.send_chunk_to_user(
+                    schedule.user.chat_id,
+                    chunk.text,
+                    book.title,
+                    chunk.chunk_number
+                )
+                db.mark_chunk_sent(chunk.id)
+                db.update_book_progress(book.id, chunk.chunk_number)
+
+                next_send = datetime.utcnow() + timedelta(seconds=schedule.interval_minutes)
+                db.update_schedule(schedule.id, next_send)
+
+                logger.info(
+                    f"Scheduled send: chunk {chunk.chunk_number}/{book.total_chunks} "
+                    f"of '{book.title}' → chat {schedule.user.chat_id}"
+                )
+            except Exception as e:
+                logger.error(f"Error processing schedule {schedule.id}: {e}")
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Обработчик команды /cancel"""
