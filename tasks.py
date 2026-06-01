@@ -72,8 +72,8 @@ def send_scheduled_chunks():
     if not schedules:
         return
 
-    bot = Bot(token=TELEGRAM_TOKEN)
-
+    # Collect all work synchronously before touching async — avoids detached session issues
+    pending = []
     for schedule in schedules:
         try:
             book = db.get_book(schedule.book_id)
@@ -86,24 +86,55 @@ def send_scheduled_chunks():
                 db.deactivate_schedule(schedule.id)
                 continue
 
-            message = (
-                f"📚 <b>{html.escape(book.title)}</b> (кусок {chunk.chunk_number}/{book.total_chunks})\n\n"
-                f"{html.escape(chunk.text)}"
-            )
-
-            asyncio.run(bot.send_message(
-                chat_id=schedule.user.chat_id,
-                text=message[:4096],
-                parse_mode="HTML",
-            ))
-
-            db.mark_chunk_sent(chunk.id)
-            db.update_book_progress(book.id, chunk.chunk_number)
-
-            next_send = datetime.utcnow() + timedelta(minutes=schedule.interval_minutes)
-            db.update_schedule(schedule.id, next_send)
-
-            logger.info(f"Sent chunk {chunk.chunk_number} of book {book.id} to user {schedule.user_id}")
-
+            pending.append({
+                "schedule_id": schedule.id,
+                "interval_minutes": schedule.interval_minutes,
+                "chat_id": schedule.user.chat_id,
+                "book_id": book.id,
+                "book_title": book.title,
+                "chunk_id": chunk.id,
+                "chunk_number": chunk.chunk_number,
+                "total_chunks": book.total_chunks,
+                "chunk_text": chunk.text,
+            })
         except Exception as e:
-            logger.error(f"Error sending chunk for schedule {schedule.id}: {e}")
+            logger.error(f"Error preparing schedule {schedule.id}: {e}")
+
+    if not pending:
+        return
+
+    async def send_all():
+        async with Bot(token=TELEGRAM_TOKEN) as bot:
+            for item in pending:
+                try:
+                    header = (
+                        f"📚 <b>{html.escape(item['book_title'])}</b> "
+                        f"(кусок {item['chunk_number']}/{item['total_chunks']})\n\n"
+                    )
+                    # Truncate raw text BEFORE escaping to avoid splitting HTML entities
+                    max_raw = 4096 - len(header)
+                    body = html.escape(item['chunk_text'][:max_raw])
+                    await bot.send_message(
+                        chat_id=item["chat_id"],
+                        text=header + body,
+                        parse_mode="HTML",
+                    )
+                    item["sent"] = True
+                    logger.info(f"Sent chunk {item['chunk_number']} of book {item['book_id']} to chat {item['chat_id']}")
+                except Exception as e:
+                    item["sent"] = False
+                    logger.error(f"Error sending chunk for schedule {item['schedule_id']}: {e}")
+
+    asyncio.run(send_all())
+
+    # Update DB only for successfully sent chunks
+    for item in pending:
+        if not item.get("sent"):
+            continue
+        try:
+            db.mark_chunk_sent(item["chunk_id"])
+            db.update_book_progress(item["book_id"], item["chunk_number"])
+            next_send = datetime.utcnow() + timedelta(minutes=item["interval_minutes"])
+            db.update_schedule(item["schedule_id"], next_send)
+        except Exception as e:
+            logger.error(f"Error updating DB after send for schedule {item['schedule_id']}: {e}")
